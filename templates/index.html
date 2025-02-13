@@ -8,21 +8,17 @@
 <body>
     <video id="video" autoplay></video>
     <button id="switchButton">Switch Camera</button>
-    <input type="range" id="zoomSlider" min="1" max="5" step="0.1" value="1">
-    <span id="zoomValue">1x</span>
     <canvas id="canvas" style="display: none;"></canvas>
 
     <script>
         const video = document.getElementById('video');
         const switchButton = document.getElementById('switchButton');
-        const zoomSlider = document.getElementById('zoomSlider');
-        const zoomValue = document.getElementById('zoomValue');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const serverUrl = 'https://192.168.68.114:5000/send';
 
         let currentStream = null;
-        let currentFacingMode = 'environment'; // Default to back camera
+        let currentFacingMode = 'user'; // Default to back camera
         let currentTrack = null;
 
         async function startCamera(facingMode) {
@@ -64,13 +60,6 @@
         switchButton.addEventListener('click', () => {
             currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
             startCamera(currentFacingMode);
-        });
-
-        zoomSlider.addEventListener('input', () => {
-            if (currentTrack) {
-                currentTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
-                zoomValue.textContent = `${zoomSlider.value}x`;
-            }
         });
 
         function sendFrame() {

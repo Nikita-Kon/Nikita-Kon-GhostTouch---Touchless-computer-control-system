@@ -1,10 +1,40 @@
-# Import libraries
+# region Import modules
+from flask import Flask, render_template, request
+from flask_cors import CORS
+import numpy as np
+import threading
+
 import time
 import cv2
 import math
 import mediapipe as mp
 import mouse
-from queue import Queue
+# endregion
+
+app = Flask(__name__)
+CORS(app)
+
+# region Server setup
+# last web frame
+latest_frame = None
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/send', methods=['POST'])
+def receive_frame():
+    global latest_frame
+
+    if 'frame' not in request.files:
+        return "No frame received", 400
+
+    file = request.files['frame']
+    np_arr = np.frombuffer(file.read(), np.uint8)
+    latest_frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    return "Frame received", 200
+# endregion
 
 # solution hands
 mp_hands = mp.solutions.hands
@@ -115,21 +145,47 @@ def MoveByHand(image):
     cv2.imshow('MediaPipe Hands', image)
     cv2.waitKey(4)
 
-with mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.8, min_tracking_confidence=0.5) as hands:
-    arr = list()
-    cap = cv2.VideoCapture(0)
-    frame_timestamp_ms = 0
-    arr_counter = 0
-    # exponential filter koef
-    alpha = 0.8
-    window_size = 3
-    # main cycle
-    while cap.isOpened():
-        success, image = cap.read()
+def MoveByHandWeb():
+    global latest_frame
 
-        MoveByHand(image)
+    while True:
+        if latest_frame is not None:
+            latest_frame = cv2.rotate(latest_frame, cv2.ROTATE_90_CLOCKWISE)
+            MoveByHand(latest_frame)
 
-cap.release()
+            latest_frame = None
+        # Exit
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
+
+if __name__ == '__main__':
+    # Web to get frames from other device, Native to use laptop camera   Web address- https://192.168.68.114:5000
+    # Web / Native
+    Mode = "Web"
+    with mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.8,
+                        min_tracking_confidence=0.5) as hands:
+        arr = list()
+        cap = cv2.VideoCapture(0)
+        # exponential filter koef
+        alpha = 0.8
+        window_size = 3
+        if Mode == "Nativex":
+
+                # main cycle
+                while cap.isOpened():
+                    success, image = cap.read()
+
+                    MoveByHand(image)
+                    # Exit
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+
+        elif Mode == "Web":
+            threading.Thread(target=MoveByHandWeb, daemon=False).start()
+            app.run(host='0.0.0.0', port=5000, debug=True, ssl_context='adhoc')
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 

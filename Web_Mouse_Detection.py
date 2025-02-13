@@ -6,7 +6,6 @@ import numpy as np
 app = Flask(__name__)
 CORS(app)
 
-
 latest_frame = None
 
 @app.route('/')
