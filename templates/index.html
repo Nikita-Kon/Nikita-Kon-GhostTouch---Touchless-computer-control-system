@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Stream with Zoom</title>
+</head>
+<body>
+    <video id="video" autoplay></video>
+    <button id="switchButton">Switch Camera</button>
+    <input type="range" id="zoomSlider" min="1" max="5" step="0.1" value="1">
+    <span id="zoomValue">1x</span>
+    <canvas id="canvas" style="display: none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const switchButton = document.getElementById('switchButton');
+        const zoomSlider = document.getElementById('zoomSlider');
+        const zoomValue = document.getElementById('zoomValue');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const serverUrl = 'https://192.168.68.114:5000/send';
+
+        let currentStream = null;
+        let currentFacingMode = 'environment'; // Default to back camera
+        let currentTrack = null;
+
+        async function startCamera(facingMode) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingMode,
+                        zoom: true  // Ensure zoom capability is included
+                    }
+                });
+
+                currentStream = stream;
+                video.srcObject = stream;
+
+                // Get the video track to apply zoom
+                currentTrack = stream.getVideoTracks()[0];
+                const capabilities = currentTrack.getCapabilities();
+
+                // Check if zoom is supported
+                if ('zoom' in capabilities) {
+                    zoomSlider.min = capabilities.zoom.min;
+                    console.log(capabilities.zoom.min);
+                    zoomSlider.max = capabilities.zoom.max;
+                    zoomSlider.step = capabilities.zoom.step || 0.1;
+                    zoomSlider.value = capabilities.zoom.min;
+                    zoomValue.textContent = `${capabilities.zoom.min}x`;
+                } else {
+                    zoomSlider.style.display = 'none'; // Hide zoom if not supported
+                }
+            } catch (error) {
+                console.error("Error accessing camera:", error);
+            }
+        }
+
+        switchButton.addEventListener('click', () => {
+            currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+            startCamera(currentFacingMode);
+        });
+
+        zoomSlider.addEventListener('input', () => {
+            if (currentTrack) {
+                currentTrack.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+                zoomValue.textContent = `${zoomSlider.value}x`;
+            }
+        });
+
+        function sendFrame() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                const formData = new FormData();
+                formData.append('frame', blob, 'frame.jpg');
+
+                fetch(serverUrl, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => console.log("Frame sent"))
+                .catch(error => console.error("Error sending frame:", error));
+            }, 'image/jpeg');
+
+            setTimeout(sendFrame, 100);
+        }
+
+        video.addEventListener('loadeddata', sendFrame);
+
+        startCamera(currentFacingMode); // Start with default back camera
+    </script>
+</body>
+</html>
